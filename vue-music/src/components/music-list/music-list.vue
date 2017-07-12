@@ -5,12 +5,12 @@
     </div>
     <h1 class="title" v-html="title"></h1>
     <div class="bg-image" :style="bgStyle" ref="bgImage">
-      <!--<div class="play-wrapper">-->
-        <!--<div ref="playBtn" class="play">-->
-          <!--<i class="icon-play"></i>-->
-          <!--<span class="text">随机播放全部</span>-->
-        <!--</div>-->
-      <!--</div>-->
+      <div class="play-wrapper" v-show="songs.length && this.playerShow">
+        <div ref="playBtn" class="play">
+          <i class="icon-play"></i>
+          <span class="text">随机播放全部</span>
+        </div>
+      </div>
       <div class="filter"></div>
     </div>
     <div class="bg-layer" ref="layer"></div>
@@ -18,10 +18,10 @@
             :data="songs"
             :listen-scroll="listenScroll"
             @scroll="scroll"
-            :probe-type="probeType"            
+            :probe-type="probeType"
             ref="list">
       <div class="song-list-wrapper">
-        <song-list :songs="songs"></song-list>
+        <song-list @select="selectItem" :songs="songs"></song-list>
       </div>
       <div v-show="!songs.length" class="loading-container">
         <loading></loading>
@@ -34,6 +34,8 @@
   import Scroll from '../../base/scroll/scroll'
   import Loading from '../../base/loading/loading'
   import SongList from '../../base/song-list/song-list.vue'
+  import {prefixStyle} from '../../common/js/dom'
+  import {mapActions} from 'vuex'
   const TITLEHEIGHT = 42
   export default{
     props: {
@@ -52,7 +54,8 @@
     },
     data () {
       return {
-        scrollY: 0
+        scrollY: 0,
+        playerShow: true
       }
     },
     created () {
@@ -67,10 +70,7 @@
     mounted () {
       this.imageHeight = this.$refs.bgImage.clientHeight
       this.minHeight = -this.imageHeight + TITLEHEIGHT
-      this.imageWidth = this.$refs.bgImage.clientWidth
       this.$refs.list.$el.style.top = `${this.imageHeight}px`
-      // this.$refs.layer.style.height = `${this.$refs.list.clientHeight}px`
-      // console.log(this.$refs.list.clientHeight)
     },
     methods: {
       scroll (pos) {
@@ -78,37 +78,46 @@
       },
       back () {
         this.$router.back()
-      }
+      },
+      selectItem (item, index) {
+        this.selectPlay({
+          list: this.songs,
+          index: index
+        })
+      },
+      ...mapActions([
+        'selectPlay'
+      ])
     },
     computed: {
       bgStyle () {
         return `background-image:url(${this.bgImage})`
-      },
-      enlargeImage () {
-        let customHeight = this.imageHeight * 0.7
-        let nowHeight = customHeight + this.scrollY
-        let percent = nowHeight / customHeight
-        return (this.imageWidth * percent)
       }
     },
     watch: {
       scrollY (newY) {
         let translateY = Math.max(this.minHeight, newY)
         let zIndex = 0
-        this.$refs.layer.style.transform = `translate3d(0, ${translateY}px, 0)`
+        let scale = 1
+        this.$refs.layer.style[prefixStyle('transform')] = `translate3d(0, ${translateY}px, 0)`
         if (newY < this.minHeight) {
           zIndex = 10
           this.$refs.bgImage.style.paddingTop = 0
           this.$refs.bgImage.style.height = `${TITLEHEIGHT}px`
+          this.playerShow = false
         } else {
           this.$refs.bgImage.style.paddingTop = '70%'
           this.$refs.bgImage.style.height = 0
+          this.playerShow = true
         }
         this.$refs.bgImage.style.zIndex = zIndex
         if (newY > 0) {
-          let nowWidth = this.enlargeImage
-          this.$refs.bgImage.style.backgroundSize = `${nowWidth}px`
+          let percent = newY / this.imageHeight
+          scale = scale + percent
+        } else {
+          scale = 1
         }
+        this.$refs.bgImage.style[prefixStyle('transform')] = `scale(${scale})`
       }
     }
   }
@@ -204,7 +213,6 @@
       top: 0
       bottom: 0
       width: 100%
-      background: $color-background
       .song-list-wrapper {
         padding: 20px 30px
       }
