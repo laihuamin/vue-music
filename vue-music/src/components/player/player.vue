@@ -1,58 +1,232 @@
 <template>
     <div class="player" v-show="playList.length">
+      <transition name="normal"
+                  @enter="enter"
+                  @after-enter="afterEnter"
+                  @leave="leave"
+                  @after-leave="afterLeave"
+      >
         <div class="normal-player" v-show="fullScreen">
             <div class="background">
-              <img width="100%" height="100%" />
+              <img width="100%" height="100%" :src="currentMusic.image" />
             </div>
             <div class="top">
-              <div class="back">
+              <div class="back" @click="close">
                 <i class="icon-back"></i>
               </div>
-              <h1 class="title"></h1>
-              <h2 class="subtitle"></h2>
+              <h1 class="title" v-html="currentMusic.name"></h1>
+              <h2 class="subtitle" v-html="currentMusic.singer"></h2>
             </div>
             <div class="middle">
               <div class="middle-l">
-                <div class="cd-wrapper">
-                  <div class="cd">
-                    <img class="image">
+                <div class="cd-wrapper" ref="cdWrapper">
+                  <div class="cd" :class="rotate">
+                    <img class="image" :src="currentMusic.image">
                   </div>
                 </div>
               </div>
             </div>
           <div class="bottom">
             <div class="operators">
-              <div class="icon icon-left">
+              <div class="icon i-left">
                 <i class="icon-sequence"></i>
               </div>
-              <div class="icon icon-left">
+              <div @click="prev" class="icon i-left" :class="disableCls">
                 <i class="icon-prev"></i>
               </div>
-              <div class="icon icon-center">
-                <i class="icon-play"></i>
+              <div class="icon i-center" :class="disableCls">
+                <i @click="changePlay" :class="playIcon"></i>
               </div>
-              <div class="icon icon-right">
-                <i class="icon-next"></i>
+              <div @click="next" class="icon i-right" :class="disableCls">
+                <i class="icon-next" ></i>
               </div>
-              <div class="icon icon-right">
+              <div class="icon i-right">
                 <i class="icon icon-not-favorite"></i>
               </div>
             </div>
           </div>
         </div>
-        <div class="mini-player" v-show="!fullScreen"></div>
+      </transition>
+      <transition name="mini">
+        <div class="mini-player" v-show="!fullScreen" @click="open">
+          <div class="icon">
+            <img :class="rotate" width="40" height="40" :src="currentMusic.image" />
+          </div>
+          <div class="text">
+            <div class="name" v-html="currentMusic.name"></div>
+            <div class="desc"></div>
+          </div>
+          <div class="control">
+            <i @click.stop="changePlay" :class="miniIcon"></i>
+          </div>
+          <div class="control">
+            <i class="icon-playlist"></i>
+          </div>
+        </div>
+      </transition>
+      <audio ref="audio" :src="currentMusic.url" @canplay="ready" @error="error"></audio>
     </div>
 </template>
 
 <script type="text/ecmascript-6">
-  import {mapGetters} from 'vuex'
-
+  import {mapGetters, mapMutations} from 'vuex'
+  import animations from 'create-keyframe-animation'
   export default {
+    data () {
+      return {
+        songReady: false
+      }
+    },
     computed: {
+      playIcon () {
+        return this.playing ? 'icon-pause' : 'icon-play'
+      },
+      miniIcon () {
+        return this.playing ? 'icon-pause-mini' : 'icon-play-mini'
+      },
+      rotate () {
+        return this.playing ? 'play' : 'play pause'
+      },
+      disableCls () {
+        return this.songReady ? '' : 'disable'
+      },
       ...mapGetters([
         'fullScreen',
-        'playList'
+        'playList',
+        'currentMusic',
+        'playing',
+        'currentIndex'
       ])
+    },
+    methods: {
+      close () {
+        this.setFullScreen(false)
+      },
+      open () {
+        this.setFullScreen(true)
+      },
+      enter (el, done) {
+        const {x, y, scale} = this._getAnimationData
+        animations.registerAnimation({
+          name: 'move',
+          animation: {
+            0: {
+              transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`
+            },
+            60: {
+              transform: `translate3d(0px, 0, 0) scale(1.1)`
+            },
+            100: {
+              transform: `translate3d(0px, 0, 0) scale(1)`
+            }
+          },
+          present: {
+            duration: 400,
+            easing: 'linear'
+          }
+        })
+        animations.runAnimation(this.$refs.cdWrapper, 'move', done)
+      },
+      afterEnter () {
+        animations.unregisterAnimation('move')
+        this.$refs.cdWrapper.style.transform = ''
+      },
+      leave (el, done) {
+        const {x, y, scale} = this._getAnimationData
+        animations.registerAnimation({
+          name: 'small',
+          animation: {
+            0: {
+              transform: `translate3d(0, 0, 0) scale(1)`
+            },
+            40: {
+              transform: `translate3d(0, 0, 0) scale(1.1)`
+            },
+            100: {
+              transform: `translate3d(-${x}px, -${y}px, 0) scale(${scale})`
+            }
+          },
+          present: {
+            duration: 400,
+            easing: 'linear'
+          }
+        })
+        animations.runAnimation(this.$refs.cdWrapper, 'small', done)
+      },
+      afterLeave () {
+        animations.unregisterAnimation('small')
+        this.$refs.cdWrapper.style.transform = ''
+      },
+      ...mapMutations({
+        setFullScreen: 'SET_FULL_SCREEN',
+        setPlaying: 'SET_PLAYING_STATE',
+        setCurrentIndex: 'SET_CURRENT_INDEX'
+      }),
+      _getAnimationData () {
+        const paddingLeft = 40
+        const x = window.innerWidth / 2 - paddingLeft
+        const paddingTop = 80 + window.innerWidth / 2
+        const paddingBottom = 30
+        const y = -(window.innerHeight - paddingTop - paddingBottom)
+        const miniWidth = 40
+        const width = 300
+        const scale = miniWidth / width
+        return {x, y, scale}
+      },
+      changePlay () {
+//        if (!this.songReady) {
+//          return
+//        }
+        this.setPlaying(!this.playing)
+//        this.songReady = false
+      },
+      prev () {
+        if (!this.songReady) {
+          return
+        }
+        let current = this.currentIndex - 1
+        if (current < 0) {
+          current = this.playList.length - 1
+        }
+        this.setCurrentIndex(current)
+        if (!this.playing) {
+          this.setPlaying(!this.playing)
+        }
+        this.songReady = false
+      },
+      next () {
+        if (!this.songReady) {
+          return
+        }
+        let current = this.currentIndex + 1
+        if (current > this.playList.length - 1) {
+          current = 0
+        }
+        this.setCurrentIndex(current)
+        if (!this.playing) {
+          this.setPlaying(!this.playing)
+        }
+        this.songReady = false
+      },
+      ready () {
+        this.songReady = true
+      },
+      error () {
+        this.songReady = true
+      }
+    },
+    watch: {
+      currentMusic () {
+        setTimeout(() => {
+          this.$refs.audio.play()
+        }, 1000)
+      },
+      playing (newPlay) {
+        let audio = this.$refs.audio
+        setTimeout(() => {
+          newPlay ? audio.play() : audio.pause()
+        }, 1000)
+      }
     }
   }
 </script>
@@ -61,8 +235,8 @@
   @import "../../common/stylus/variable"
   @import "../../common/stylus/mixin"
 
-  .player
-    .normal-player
+  .player {
+    .normal-player {
       position: fixed
       left: 0
       right: 0
@@ -70,7 +244,7 @@
       bottom: 0
       z-index: 150
       background: $color-background
-      .background
+      .background {
         position: absolute
         left: 0
         top: 0
@@ -79,21 +253,24 @@
         z-index: -1
         opacity: 0.6
         filter: blur(20px)
-      .top
+      }
+      .top {
         position: relative
         margin-bottom: 25px
-        .back
+        .back {
           position absolute
           top: 0
           left: 6px
           z-index: 50
-          .icon-back
+          .icon-back {
             display: block
             padding: 9px
             font-size: $font-size-large-x
             color: $color-theme
             transform: rotate(-90deg)
-        .title
+          }
+        }
+        .title {
           width: 70%
           margin: 0 auto
           line-height: 40px
@@ -101,84 +278,99 @@
           no-wrap()
           font-size: $font-size-large
           color: $color-text
-        .subtitle
+        }
+        .subtitle {
           line-height: 20px
           text-align: center
           font-size: $font-size-medium
           color: $color-text
-      .middle
+        }
+      }
+      .middle {
         position: fixed
         width: 100%
         top: 80px
         bottom: 170px
         white-space: nowrap
         font-size: 0
-        .middle-l
+        .middle-l {
           display: inline-block
           vertical-align: top
           position: relative
           width: 100%
           height: 0
           padding-top: 80%
-          .cd-wrapper
+          .cd-wrapper {
             position: absolute
             left: 10%
             top: 0
             width: 80%
             height: 100%
-            .cd
+            .cd {
               width: 100%
               height: 100%
               box-sizing: border-box
               border: 10px solid rgba(255, 255, 255, 0.1)
               border-radius: 50%
-              &.play
+              &.play {
                 animation: rotate 20s linear infinite
-              &.pause
+              }
+              &.pause {
                 animation-play-state: paused
-              .image
+              }
+              .image {
                 position: absolute
                 left: 0
                 top: 0
                 width: 100%
                 height: 100%
                 border-radius: 50%
-
-          .playing-lyric-wrapper
+              }
+            }
+          }
+          .playing-lyric-wrapper {
             width: 80%
             margin: 30px auto 0 auto
             overflow: hidden
             text-align: center
-            .playing-lyric
+            .playing-lyric {
               height: 20px
               line-height: 20px
               font-size: $font-size-medium
               color: $color-text-l
-        .middle-r
+            }
+          }
+        }
+        .middle-r {
           display: inline-block
           vertical-align: top
           width: 100%
           height: 100%
           overflow: hidden
-          .lyric-wrapper
+          .lyric-wrapper {
             width: 80%
             margin: 0 auto
             overflow: hidden
             text-align: center
-            .text
+            .text {
               line-height: 32px
               color: $color-text-l
               font-size: $font-size-medium
-              &.current
+              &.current {
                 color: $color-text
-      .bottom
+              }
+            }
+          }
+        }
+      }
+      .bottom {
         position: absolute
         bottom: 50px
         width: 100%
-        .dot-wrapper
+        .dot-wrapper {
           text-align: center
           font-size: 0
-          .dot
+          .dot {
             display: inline-block
             vertical-align: middle
             margin: 0 4px
@@ -186,60 +378,84 @@
             height: 8px
             border-radius: 50%
             background: $color-text-l
-            &.active
+            &.active {
               width: 20px
               border-radius: 5px
               background: $color-text-ll
-        .progress-wrapper
+            }
+          }
+        }
+        .progress-wrapper {
           display: flex
           align-items: center
           width: 80%
           margin: 0px auto
           padding: 10px 0
-          .time
+          .time {
             color: $color-text
             font-size: $font-size-small
             flex: 0 0 30px
             line-height: 30px
             width: 30px
-            &.time-l
+            &.time-l {
               text-align: left
-            &.time-r
+            }
+            &.time-r {
               text-align: right
-          .progress-bar-wrapper
+            }
+          }
+          .progress-bar-wrapper {
             flex: 1
-        .operators
+          }
+        }
+        .operators {
           display: flex
           align-items: center
-          .icon
+          .icon {
             flex: 1
             color: $color-theme
-            &.disable
+            &.disable {
               color: $color-theme-d
-            i
+            }
+            i {
               font-size: 30px
-          .i-left
+            }
+          }
+          .i-left {
             text-align: right
-          .i-center
+          }
+          .i-center {
             padding: 0 20px
             text-align: center
-            i
+            i {
               font-size: 40px
-          .i-right
+            }
+          }
+          .i-right {
             text-align: left
-          .icon-favorite
+          }
+          .icon-favorite {
             color: $color-sub-theme
-      &.normal-enter-active, &.normal-leave-active
+          }
+        }
+      }
+      &.normal-enter-active, &.normal-leave-active {
         transition: all 0.4s
-        .top, .bottom
+        .top, .bottom {
           transition: all 0.4s cubic-bezier(0.86, 0.18, 0.82, 1.32)
-      &.normal-enter, &.normal-leave-to
+        }
+      }
+      &.normal-enter, &.normal-leave-to {
         opacity: 0
-        .top
+        .top {
           transform: translate3d(0, -100px, 0)
-        .bottom
+        }
+        .bottom {
           transform: translate3d(0, 100px, 0)
-    .mini-player
+        }
+      }
+    }
+    .mini-player {
       display: flex
       align-items: center
       position: fixed
@@ -249,46 +465,68 @@
       width: 100%
       height: 60px
       background: $color-highlight-background
-      &.mini-enter-active, &.mini-leave-active
+      &.mini-enter-active, &.mini-leave-active {
         transition: all 0.4s
-      &.mini-enter, &.mini-leave-to
+      }
+      &.mini-enter, &.mini-leave-to {
         opacity: 0
-      .icon
+      }
+      .icon {
         flex: 0 0 40px
         width: 40px
         padding: 0 10px 0 20px
-        img
+        img {
           border-radius: 50%
-          &.play
+          &.play {
             animation: rotate 10s linear infinite
-          &.pause
+          }
+          &.pause {
             animation-play-state: paused
-      .text
+          }
+        }
+      }
+      .text {
         display: flex
         flex-direction: column
         justify-content: center
         flex: 1
         line-height: 20px
         overflow: hidden
-        .name
+        .name {
           margin-bottom: 2px
           no-wrap()
           font-size: $font-size-medium
           color: $color-text
-        .desc
+        }
+        .desc {
           no-wrap()
           font-size: $font-size-small
           color: $color-text-d
-      .control
+        }
+      }
+      .control {
         flex: 0 0 30px
         width: 30px
         padding: 0 10px
-        .icon-play-mini, .icon-pause-mini, .icon-playlist
+        .icon-play-mini, .icon-pause-mini, .icon-playlist {
           font-size: 30px
           color: $color-theme-d
-        .icon-mini
+        }
+        .icon-mini {
           font-size: 32px
           position: absolute
           left: 0
           top: 0
+        }
+      }
+    }
+  }
+  @keyframes rotate {
+    0% {
+      transform: rotate(0)
+    }
+    100% {
+      transform: rotate(360deg)
+    }
+  }
 </style>
