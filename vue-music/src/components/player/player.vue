@@ -27,9 +27,16 @@
               </div>
             </div>
           <div class="bottom">
+            <div class="progress-wrapper">
+              <span class="time time-l">{{format(currentTime)}}</span>
+              <div class="progress-bar-wrapper">
+                <progress-bar></progress-bar>
+              </div>
+              <span class="time time-r">{{format(currentMusic.duration)}}</span>
+            </div>
             <div class="operators">
-              <div class="icon i-left">
-                <i class="icon-sequence"></i>
+              <div class="icon i-left" @click="changeTurn">
+                <i :class="turnIcon"></i>
               </div>
               <div @click="prev" class="icon i-left" :class="disableCls">
                 <i class="icon-prev"></i>
@@ -40,8 +47,8 @@
               <div @click="next" class="icon i-right" :class="disableCls">
                 <i class="icon-next" ></i>
               </div>
-              <div class="icon i-right">
-                <i class="icon icon-not-favorite"></i>
+              <div class="icon i-right" @click="favorite" >
+                <i class="icon" :class="favoriteIcon"></i>
               </div>
             </div>
           </div>
@@ -64,18 +71,24 @@
           </div>
         </div>
       </transition>
-      <audio ref="audio" :src="currentMusic.url" @canplay="ready" @error="error"></audio>
+      <audio ref="audio" :src="currentMusic.url" @canplay="ready" @error="error" @timeupdate="updateTime"></audio>
     </div>
 </template>
 
 <script type="text/ecmascript-6">
   import {mapGetters, mapMutations} from 'vuex'
   import animations from 'create-keyframe-animation'
+  import progressBar from '../../base/progress-bar/progress-bar.vue'
   export default {
     data () {
       return {
-        songReady: false
+        songReady: false,
+        like: false,
+        currentTime: 0
       }
+    },
+    components: {
+      progressBar
     },
     computed: {
       playIcon () {
@@ -90,12 +103,25 @@
       disableCls () {
         return this.songReady ? '' : 'disable'
       },
+      favoriteIcon () {
+        return this.like ? 'icon-favorite' : 'icon-not-favorite'
+      },
+      turnIcon () {
+        if (this.mode === 0) {
+          return 'icon-sequence'
+        } else if (this.mode === 1) {
+          return 'icon-loop'
+        } else {
+          return 'icon-random'
+        }
+      },
       ...mapGetters([
         'fullScreen',
         'playList',
         'currentMusic',
         'playing',
-        'currentIndex'
+        'currentIndex',
+        'mode'
       ])
     },
     methods: {
@@ -160,7 +186,8 @@
       ...mapMutations({
         setFullScreen: 'SET_FULL_SCREEN',
         setPlaying: 'SET_PLAYING_STATE',
-        setCurrentIndex: 'SET_CURRENT_INDEX'
+        setCurrentIndex: 'SET_CURRENT_INDEX',
+        setPlayMode: 'SET_PLAY_MODE'
       }),
       _getAnimationData () {
         const paddingLeft = 40
@@ -213,6 +240,34 @@
       },
       error () {
         this.songReady = true
+      },
+      favorite () {
+        this.like = !this.like
+      },
+      changeTurn () {
+        let mode = this.mode
+        mode++
+        if (mode === 3) {
+          mode = 0
+        }
+        this.setPlayMode(mode)
+      },
+      updateTime (e) {
+        this.currentTime = e.target.currentTime
+      },
+      format (interval) {
+        interval = interval | 0
+        let minute = interval / 60 | 0
+        let second = this._pad(interval % 60)
+        return `${minute}:${second}`
+      },
+      _pad (num, n = 2) {
+        let len = num.toString().length
+        while (len < n) {
+          num = '0' + num
+          len++
+        }
+        return num
       }
     },
     watch: {
