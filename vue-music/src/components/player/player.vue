@@ -30,7 +30,7 @@
             <div class="progress-wrapper">
               <span class="time time-l">{{format(currentTime)}}</span>
               <div class="progress-bar-wrapper">
-                <progress-bar></progress-bar>
+                <progress-bar :rate="rate" @sendRate="getRate"></progress-bar>
               </div>
               <span class="time time-r">{{format(currentMusic.duration)}}</span>
             </div>
@@ -64,14 +64,16 @@
             <div class="desc"></div>
           </div>
           <div class="control">
-            <i @click.stop="changePlay" :class="miniIcon"></i>
+            <progress-circle :radius="radius" :rate="rate">
+              <i @click.stop="changePlay" class="icon-mini" :class="miniIcon"></i>
+            </progress-circle>
           </div>
           <div class="control">
             <i class="icon-playlist"></i>
           </div>
         </div>
       </transition>
-      <audio ref="audio" :src="currentMusic.url" @canplay="ready" @error="error" @timeupdate="updateTime"></audio>
+      <audio ref="audio" :src="currentMusic.url" @canplay="ready" @error="error" @timeupdate="updateTime" @ended="end"></audio>
     </div>
 </template>
 
@@ -79,16 +81,20 @@
   import {mapGetters, mapMutations} from 'vuex'
   import animations from 'create-keyframe-animation'
   import progressBar from '../../base/progress-bar/progress-bar.vue'
+  import progressCircle from '../../base/progress-circle/progress-circle.vue'
+  import {shuffle} from '../../common/js/util'
   export default {
     data () {
       return {
         songReady: false,
         like: false,
-        currentTime: 0
+        currentTime: 0,
+        radius: 32
       }
     },
     components: {
-      progressBar
+      progressBar,
+      progressCircle
     },
     computed: {
       playIcon () {
@@ -121,8 +127,12 @@
         'currentMusic',
         'playing',
         'currentIndex',
-        'mode'
-      ])
+        'mode',
+        'sequenceList'
+      ]),
+      rate () {
+        return this.currentTime / this.currentMusic.duration
+      }
     },
     methods: {
       close () {
@@ -187,7 +197,8 @@
         setFullScreen: 'SET_FULL_SCREEN',
         setPlaying: 'SET_PLAYING_STATE',
         setCurrentIndex: 'SET_CURRENT_INDEX',
-        setPlayMode: 'SET_PLAY_MODE'
+        setPlayMode: 'SET_PLAY_MODE',
+        setPlayList: 'SET_PLAY_LIST'
       }),
       _getAnimationData () {
         const paddingLeft = 40
@@ -245,12 +256,22 @@
         this.like = !this.like
       },
       changeTurn () {
-        let mode = this.mode
-        mode++
-        if (mode === 3) {
-          mode = 0
-        }
+        let mode = (this.mode + 1) % 3
         this.setPlayMode(mode)
+        let list = []
+        if (mode === 2) {
+          list = shuffle(this.sequenceList)
+        } else {
+          list = this.sequenceList
+        }
+        this.resetIndex(list)
+        this.setPlayList(list)
+      },
+      resetIndex (list) {
+        let index = list.findIndex((item) => {
+          return item.id === this.currentMusic.id
+        })
+        this.setCurrentIndex(index)
       },
       updateTime (e) {
         this.currentTime = e.target.currentTime
@@ -268,10 +289,30 @@
           len++
         }
         return num
+      },
+      getRate (rate) {
+        this.$refs.audio.currentTime = this.currentMusic.duration * rate
+        if (!this.playing) {
+          this.setPlaying(true)
+        }
+      },
+      end () {
+        if (this.mode === 1) {
+          this.loop()
+        } else {
+          this.next()
+        }
+      },
+      loop () {
+        this.$refs.audio.currentTime = 0
+        this.$refs.audio.play()
       }
     },
     watch: {
-      currentMusic () {
+      currentMusic (newSong, oldSong) {
+        if (newSong.id === oldSong.id) {
+          return
+        }
         setTimeout(() => {
           this.$refs.audio.play()
         }, 1000)
