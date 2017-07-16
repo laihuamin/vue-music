@@ -23,6 +23,10 @@
       listenScroll: {
         type: Boolean,
         default: true
+      },
+      scrollX: {
+        type: Boolean,
+        default: false
       }
     },
     mounted () {
@@ -37,7 +41,8 @@
         }
         this.scroll = new BScroll(this.$refs.scrollWrap, {
           probeType: this.probeType,
-          click: this.click
+          click: this.click,
+          scrollX: this.scrollX
         })
         if (this.listenScroll) {
           let me = this
