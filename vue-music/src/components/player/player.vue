@@ -18,8 +18,8 @@
               <h2 class="subtitle" v-html="currentMusic.singer"></h2>
             </div>
             <div class="middle"
-                 @touchstart="middleTouchStart"
-                 @touchmove="middleTouchMove"
+                 @touchstart.prevent="middleTouchStart"
+                 @touchmove.prevent="middleTouchMove"
                  @touchend="middleTouchEnd">
               <div class="middle-l" ref="cd">
                 <div class="cd-wrapper" ref="cdWrapper">
@@ -27,11 +27,16 @@
                     <img class="image" :src="currentMusic.image">
                   </div>
                 </div>
+                <div class="playing-lyric-wrapper">
+                  <div class="playing-lyric">{{currentLineTxt}}</div>
+                </div>
               </div>
-              <scroll class="middle-r" :data="currentLyric && currentLyric.lines" ref="lyric">
+              <scroll class="middle-r" :data="currentLyric && currentLyric.lines" ref="lyricList">
                 <div class="lyric-wrapper">
                   <div v-if="this.currentLyric">
-                    <p class="text" v-for="line in this.currentLyric.lines">{{line.txt}}</p>
+                    <p ref="lyricLine"
+                       class="text"
+                       :class="{'current': currentLineNum === index}" v-for="(line, index) in this.currentLyric.lines">{{line.txt}}</p>
                   </div>
                 </div>
               </scroll>
@@ -110,7 +115,9 @@
         currentTime: 0,
         radius: 32,
         currentLyric: null,
-        currentShow: 'cd'
+        currentShow: 'cd',
+        currentLineNum: 0,
+        currentLineTxt: ''
       }
     },
     created () {
@@ -237,11 +244,13 @@
         return {x, y, scale}
       },
       changePlay () {
-//        if (!this.songReady) {
-//          return
-//        }
+        if (!this.songReady) {
+          return
+        }
         this.setPlaying(!this.playing)
-//        this.songReady = false
+        if (this.currentLyric) {
+          this.currentLyric.togglePlay()
+        }
       },
       prev () {
         if (!this.songReady) {
@@ -310,8 +319,25 @@
       },
       getLyric () {
         this.currentMusic.getLyric().then((lyric) => {
-          this.currentLyric = new Lyric(lyric)
+          this.currentLyric = new Lyric(lyric, this.handleLyric)
+          if (this.playing) {
+            this.currentLyric.play()
+          }
+        }).catch(() => {
+          this.currentLyric = null
+          this.currentLineTxt = ''
+          this.currentLineNum = 0
         })
+      },
+      handleLyric ({lineNum, txt}) {
+        this.currentLineNum = lineNum
+        if (lineNum > 5) {
+          let lineEl = this.$refs.lyricLine[lineNum - 5]
+          this.$refs.lyricList.scrollToElement(lineEl, 1000)
+        } else {
+          this.$refs.lyricList.scrollTo(0, 0, 1000)
+        }
+        this.currentLineTxt = txt
       },
       _pad (num, n = 2) {
         let len = num.toString().length
@@ -322,9 +348,13 @@
         return num
       },
       getRate (rate) {
-        this.$refs.audio.currentTime = this.currentMusic.duration * rate
+        let currentTime = this.currentMusic.duration * rate
+        this.$refs.audio.currentTime = currentTime
         if (!this.playing) {
           this.setPlaying(true)
+        }
+        if (this.currentLyric) {
+          this.currentLyric.seek(currentTime * 1000)
         }
       },
       end () {
@@ -337,10 +367,13 @@
       loop () {
         this.$refs.audio.currentTime = 0
         this.$refs.audio.play()
+        if (this.currentLyric) {
+          this.currentLyric.seek()
+        }
       },
       middleTouchStart (e) {
         this.touch.flag = true
-        let touch = e.touches[0]
+        const touch = e.touches[0]
         this.touch.startX = touch.pageX
         this.touch.startY = touch.pageY
       },
@@ -348,17 +381,17 @@
         if (!this.touch.flag) {
           return
         }
-        let touch = e.touches[0]
+        const touch = e.touches[0]
         const deltaX = touch.pageX - this.touch.startX
         const deltaY = touch.pageY - this.touch.startY
-        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        if (Math.abs(deltaX) < Math.abs(deltaY)) {
           return
         }
         const left = this.currentShow === 'cd' ? 0 : -window.innerWidth
         const offsetWidth = Math.min(0, Math.max(-window.innerWidth, left + deltaX))
         this.touch.precent = Math.abs(offsetWidth / window.innerWidth)
-        this.$refs.lyric.$el.style[transform] = `translate3d(${offsetWidth}px, 0, 0)`
-        this.$refs.lyric.$el.style[transitionDuration] = 0
+        this.$refs.lyricList.$el.style[transform] = `translate3d(${offsetWidth}px, 0, 0)`
+        this.$refs.lyricList.$el.style[transitionDuration] = 0
         this.$refs.cd.style.opacity = 1 - this.touch.precent
         this.$refs.cd.style[transitionDuration] = 0
       },
@@ -377,16 +410,16 @@
           }
         } else {
           if (this.touch.precent < 0.9) {
-            offsetWidth = window.innerWidth
+            offsetWidth = 0
             this.currentShow = 'cd'
             opacity = 1
           } else {
-            offsetWidth = 0
+            offsetWidth = -window.innerWidth
             opacity = 0
           }
         }
-        this.$refs.lyric.$el.style[transform] = `translate3d(${offsetWidth}px, 0, 0)`
-        this.$refs.lyric.$el.style[transitionDuration] = `${time}ms`
+        this.$refs.lyricList.$el.style[transform] = `translate3d(${offsetWidth}px, 0, 0)`
+        this.$refs.lyricList.$el.style[transitionDuration] = `${time}ms`
         this.$refs.cd.style.opacity = opacity
         this.$refs.cd.style[transitionDuration] = `${time}ms`
       }
@@ -395,6 +428,9 @@
       currentMusic (newSong, oldSong) {
         if (newSong.id === oldSong.id) {
           return
+        }
+        if (this.currentLyric) {
+          this.currentLyric.stop()
         }
         clearTimeout(this.timer)
         this.timer = setTimeout(() => {
