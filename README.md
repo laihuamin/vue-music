@@ -7,7 +7,7 @@
 
 ## 演示 
 
-<a href="https://www.51nannan.cn/dist/index" target=_blank>在线演示戳我</a>（请使用chrome开发者手机演示模式预览）
+<a href="http://www.51nannan.cn/dist/index.html" target=_blank>在线演示戳我</a>（请使用chrome开发者手机演示模式预览）
 坑：在部署服务器的时候发现自己原来在后端写过反向代理的路由，所以，部署上去的时候遇到跨域问题，现在自己已经写了
 一个小型的express服务，正在配置服务器当中...
 
